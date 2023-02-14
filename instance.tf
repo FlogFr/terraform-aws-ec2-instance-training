@@ -11,6 +11,10 @@ variable "packages" {
   type = list(string)
 }
 
+variable "ingresses" {
+  type = list(object({protocol = number, port = number}))
+}
+
 # Search for the latest aws ami
 # aws ec2 describe-images --owners amazon --filters "Name=description,Values=Debian 11*" "Name=architecture,Values=x86_64" "Name=virtualization-type,Values=hvm"
 data "aws_ami" "debian" {
@@ -67,22 +71,17 @@ resource "aws_subnet" "submain" {
 resource "aws_default_network_acl" "main" {
   default_network_acl_id = aws_vpc.main.default_network_acl_id
 
-  ingress {
-    protocol   = -1
-    rule_no    = 110
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 0
-    to_port    = 0
-  }
+  dynamic "ingress" {
+    for_each = var.ingresses
 
-  ingress {
-    protocol        = -1
-    rule_no         = 120
-    action          = "allow"
-    ipv6_cidr_block = "::/0"
-    from_port       = 0
-    to_port         = 0
+    content {
+      protocol   = ingress.value["protocol"]
+      rule_no    = sum([100, ingress.value["port"]])
+      action     = "allow"
+      cidr_block = "0.0.0.0/0"
+      from_port  = ingress.value["port"]
+      to_port    = ingress.value["port"]
+    }
   }
 
   egress {
@@ -184,11 +183,15 @@ EOF
 resource "aws_default_security_group" "default" {
   vpc_id = aws_vpc.main.id
 
-  ingress {
-    protocol  = -1
-    from_port = 0
-    to_port   = 0
-    cidr_blocks = ["0.0.0.0/0"]
+  dynamic "ingress" {
+    for_each = var.ingresses
+
+    content {
+      protocol  = ingress.value["protocol"]
+      from_port = ingress.value["port"]
+      to_port   = ingress.value["port"]
+      cidr_blocks = ["0.0.0.0/0"]
+    }
   }
 
   egress {
